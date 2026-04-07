@@ -54,29 +54,6 @@ npm run check-balance
 
 ## Usage
 
-### CLI
-
-```bash
-npm start <product-url> <quantity> '<buyer-json>'
-```
-
-**Example:**
-
-```bash
-npm start "https://www.amazon.com/dp/B0011FJPAY" 1 '{
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "email": "jane@example.com",
-  "phone": "+15551234567",
-  "address1": "123 Main St",
-  "address2": "Apt 1",
-  "city": "San Francisco",
-  "province": "CA",
-  "country": "US",
-  "postalCode": "94105"
-}'
-```
-
 ### As a Claude Code skill
 
 This repo includes a `/purchase` Claude Code skill. Open the repo in Claude Code and run:
