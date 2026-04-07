@@ -48,8 +48,6 @@ The agent wallet needs:
 - **USDC on Base** — to pay for purchases
 - **ETH on Base** — a small amount (~0.001 ETH) for gas fees
 
-Use [Coinbase](https://coinbase.com) to withdraw directly to Base, or bridge from Ethereum mainnet. Check your balance at any time:
-
 ```bash
 npm run check-balance
 ```
