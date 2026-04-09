@@ -4,19 +4,20 @@ A Node.js agent that purchases products via the Rye Checkout Intent API using x4
 
 ## What this does
 
+**Non-production version** — uses Stripe's test helper to simulate USDC deposits instead of sending real crypto.
+
 The agent:
 1. Creates a checkout intent via the Rye API
 2. Polls until an offer is ready
-3. Requests x402 payment details (gets a 402 with a USDC deposit address)
-4. Signs and sends a USDC transfer on Base using a server-side wallet
-5. Confirms the purchase with the transaction hash
+3. Requests x402 payment details (gets a 402 with a USDC deposit address and Stripe PaymentIntent ID)
+4. Simulates USDC deposit via Stripe's `simulate_crypto_deposit` test helper
+5. Confirms the purchase with a test transaction hash
 6. Polls until the order is completed
 
 ## Stack
 
 - TypeScript + Node.js (ESM)
-- viem — wallet management and on-chain USDC transfers
-- Base network (EVM, USDC stablecoin)
+- Stripe test helpers — simulated crypto deposit settlement
 - Rye Checkout Intent API with x402 payment method
 
 ## Key files
@@ -40,24 +41,17 @@ Copy `.env.example` to `.env` and fill in:
 ```
 CHECKOUT_INTENTS_API_KEY=   # Rye API key
 CHECKOUT_INTENTS_BASE_URL=https://api.rye.com
-AGENT_PRIVATE_KEY=0x...     # agent wallet private key
+STRIPE_SECRET_KEY=rk_test_...  # Stripe test mode key
+AGENT_PRIVATE_KEY=0x...     # optional, only for check-balance script
 ```
 
-## Wallet
-
-- Agent wallet address: `0x6aBD1Ba14443F1ac5302F8279Ee7b17edd6426eF`
-- Network: Base (EVM)
-- Requires: USDC (for purchases) + a small amount of ETH (for gas)
-- Import the private key into Phantom (Ethereum) to fund the wallet visually
-
-## x402 payment flow
+## x402 payment flow (non-production)
 
 The Rye API implements the x402 protocol. The confirm endpoint:
-- Returns `402` with a `PAYMENT-REQUIRED` header (base64 JSON) containing the deposit address and USDC amount
-- Accepts a `PAYMENT-SIGNATURE` header on retry containing the signed tx hash
+- Returns `402` with a `PAYMENT-REQUIRED` header (base64 JSON) containing the deposit address, USDC amount, and Stripe PaymentIntent ID
+- Instead of sending real USDC on-chain, this demo calls Stripe's `simulate_crypto_deposit` test helper to fulfill the PaymentIntent
+- Accepts a `PAYMENT-SIGNATURE` header on retry containing the test tx hash
 - Settles asynchronously via Stripe crypto PaymentIntent polling
-
-Supported networks: `base`, `solana`, `tempo`. Base is recommended (lowest gas, ~2s settlement).
 
 ## Related
 

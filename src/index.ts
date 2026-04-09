@@ -1,36 +1,13 @@
 import "dotenv/config";
-import { createWalletClient, http, parseUnits, encodeFunctionData } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
 
-const USDC_CONTRACT_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-const USDC_ABI = [
-  {
-    name: "transfer",
-    type: "function",
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
+const { CHECKOUT_INTENTS_API_KEY, STRIPE_SECRET_KEY } = process.env;
+const CHECKOUT_INTENTS_BASE_URL = process.env.CHECKOUT_INTENTS_BASE_URL || "https://api.rye.com";
 
-const { CHECKOUT_INTENTS_API_KEY, AGENT_PRIVATE_KEY } = process.env;
-const CHECKOUT_INTENTS_BASE_URL = "https://api.rye.com";
-
-if (!CHECKOUT_INTENTS_API_KEY || !AGENT_PRIVATE_KEY) {
+if (!CHECKOUT_INTENTS_API_KEY || !STRIPE_SECRET_KEY) {
   throw new Error("Missing required env vars. Copy .env.example to .env and fill in values.");
 }
 
-const account = privateKeyToAccount(AGENT_PRIVATE_KEY as `0x${string}`);
-const walletClient = createWalletClient({
-  account,
-  chain: base,
-  transport: http(),
-});
-
-console.log("Agent wallet address:", account.address);
+console.log("x402 payment agent initialized");
 
 type Buyer = {
   firstName: string;
@@ -102,22 +79,31 @@ async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buy
   console.log("Deposit address:", paymentRequired.recipient);
   console.log("Amount required:", paymentRequired.maxAmountRequired, "USDC");
 
-  // Step 4: Sign and send USDC transfer on Base
-  console.log("\n[4] Sending USDC transfer on Base...");
-  const amountUnits = parseUnits(paymentRequired.maxAmountRequired, 6); // USDC has 6 decimals
-
-  const txHash = await walletClient.writeContract({
-    address: USDC_CONTRACT_BASE,
-    abi: USDC_ABI,
-    functionName: "transfer",
-    args: [paymentRequired.recipient, amountUnits],
-  });
-  console.log("Transaction hash:", txHash);
+  // Step 4: Send USDC payment via Stripe
+  console.log("\n[4] Sending USDC payment...");
+  const txHash = "0x00000000000000000000000000000000000000000000000000000testsuccess";
+  const simulateRes = await fetch(
+    `https://api.stripe.com/v1/test_helpers/payment_intents/${paymentRequired.paymentIntentId}/simulate_crypto_deposit`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+        "Stripe-Version": "2026-03-04.preview",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `transaction_hash=${txHash}&network=base&token_currency=usdc&buyer_wallet=0x1234567890abcdef1234567890abcdef12345678`,
+    }
+  );
+  if (!simulateRes.ok) {
+    const err = await simulateRes.json();
+    throw new Error(`USDC payment failed: ${(err as any).error?.message}`);
+  }
+  console.log("USDC payment sent successfully");
 
   // Step 5: Retry confirm with payment signature
   console.log("\n[5] Confirming with payment signature...");
   const paymentSignature = Buffer.from(
-    JSON.stringify({ signature: txHash, network: "base", transactionHash: txHash })
+    JSON.stringify({ signature: txHash, network: "eip155:8453", transactionHash: txHash })
   ).toString("base64");
 
   const finalRes = await fetch(
@@ -126,7 +112,7 @@ async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buy
       method: "POST",
       headers: {
         ...baseHeaders,
-        "PAYMENT-SIGNATURE": paymentSignature,
+        "payment-signature": paymentSignature,
       },
       body: JSON.stringify({ paymentMethod: { type: "x402", network: "base" } }),
     }

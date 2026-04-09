@@ -1,21 +1,23 @@
 # x402-demo
 
-A Node.js agent that purchases products via the [Rye Checkout Intent API](https://rye.com) using x402 stablecoin payments (USDC on Base).
+A Node.js agent that purchases products via the [Rye Checkout Intent API](https://rye.com) using x402 stablecoin payments.
+
+**Non-production version** — uses Stripe's test helper to simulate USDC deposits instead of sending real crypto on-chain.
 
 ## How it works
 
 1. Creates a checkout intent via the Rye API
 2. Polls until a price offer is ready
-3. Requests x402 payment details — receives a `402` response with a USDC deposit address
-4. Signs and sends a USDC transfer on Base
-5. Confirms the purchase with the transaction hash
+3. Requests x402 payment details — receives a `402` response with a USDC deposit address and Stripe PaymentIntent ID
+4. Simulates USDC deposit via Stripe's `simulate_crypto_deposit` test helper
+5. Confirms the purchase with a test transaction hash
 6. Polls until the order is completed
 
 ## Requirements
 
 - Node.js 18+
 - A Rye API key with Checkout Intents access
-- An EVM wallet funded with USDC and a small amount of ETH on Base (for gas)
+- A Stripe test mode secret key (e.g. `rk_test_...`)
 
 ## Setup
 
@@ -31,25 +33,9 @@ cp .env.example .env
 
 ```
 CHECKOUT_INTENTS_API_KEY=   # Rye API key
-AGENT_PRIVATE_KEY=0x...     # Agent wallet private key
-```
-
-### Generate a wallet
-
-```bash
-npm run generate-wallet
-```
-
-This prints a new private key and address. Add the private key to `.env` as `AGENT_PRIVATE_KEY`.
-
-### Fund the wallet
-
-The agent wallet needs:
-- **USDC on Base** — to pay for purchases
-- **ETH on Base** — a small amount (~0.001 ETH) for gas fees
-
-```bash
-npm run check-balance
+CHECKOUT_INTENTS_BASE_URL=https://api.rye.com
+STRIPE_SECRET_KEY=rk_test_...  # Stripe test mode key
+AGENT_PRIVATE_KEY=0x...     # Optional, only for check-balance script
 ```
 
 ## Usage
@@ -68,6 +54,6 @@ Claude will prompt you for buyer details, check your wallet balance, run the pur
 
 Any product URL supported by the Rye API — Amazon, Shopify stores, and more.
 
-## Network
+## How settlement works
 
-All payments use **USDC on Base** (EVM). Base offers ~1s on-chain confirmation and low gas fees. Stripe settles the payment asynchronously, typically within 2 minutes of the on-chain transfer confirming.
+This demo uses Stripe's `simulate_crypto_deposit` test helper to fulfill the PaymentIntent without sending real USDC. Stripe settles the simulated payment asynchronously, typically within 10-20 seconds in test mode.
