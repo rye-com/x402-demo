@@ -30,7 +30,7 @@ Then prompt the user for the following buyer details if not already provided in 
 
 2. Build the buyer JSON from the collected info and run:
    ```
-   npm start "<product-url>" <quantity> '<buyer-json>'
+   npm run rye -- "<product-url>" <quantity> '<buyer-json>'
    ```
 
 3. Report the outcome:

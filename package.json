@@ -1,13 +1,18 @@
 {
-  "name": "x402-demo",
+  "name": "x402-demos",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
   "scripts": {
-    "start": "tsx src/index.ts",
-    "generate-wallet": "tsx src/generate-wallet.ts",
-    "check-balance": "tsx src/check-balance.ts"
+    "rye": "tsx demos/rye-x402-demo/src/index.ts",
+    "proxy": "tsx demos/x402-proxy-demo/src/index.ts",
+    "generate-wallet": "tsx shared/generate-wallet.ts",
+    "check-balance": "tsx shared/check-balance.ts"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
     "dotenv": "^16.0.0",
     "viem": "^2.0.0"
   },

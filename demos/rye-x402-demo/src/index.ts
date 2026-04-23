@@ -1,28 +1,20 @@
 import "dotenv/config";
+import { buildPaymentSignature, parsePaymentRequired, pay } from "../../../shared/x402";
+import type { Buyer, Network } from "../../../shared/types";
 
-const { CHECKOUT_INTENTS_API_KEY, STRIPE_SECRET_KEY } = process.env;
-const CHECKOUT_INTENTS_BASE_URL = process.env.CHECKOUT_INTENTS_BASE_URL || "https://api.rye.com";
+const { CHECKOUT_INTENTS_API_KEY } = process.env;
+const CHECKOUT_INTENTS_BASE_URL = "https://api.rye.com";
 
-if (!CHECKOUT_INTENTS_API_KEY || !STRIPE_SECRET_KEY) {
-  throw new Error("Missing required env vars. Copy .env.example to .env and fill in values.");
+if (!CHECKOUT_INTENTS_API_KEY) {
+  throw new Error("Missing CHECKOUT_INTENTS_API_KEY. Copy .env.example to .env and fill in values.");
 }
 
-console.log("x402 payment agent initialized");
-
-type Buyer = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  address1: string;
-  address2?: string;
-  city: string;
-  province: string;
-  country: string;
-  postalCode: string;
-};
-
-async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buyer) {
+async function purchaseWithX402(
+  productUrl: string,
+  quantity: number,
+  buyer: Buyer,
+  network: Network,
+) {
   const baseHeaders = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${CHECKOUT_INTENTS_API_KEY}`,
@@ -58,13 +50,13 @@ async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buy
   console.log("Offer total:", offer.cost.total, "cents");
 
   // Step 3: First confirm call — get 402 with deposit address
-  console.log("\n[3] Requesting x402 payment details...");
+  console.log(`\n[3] Requesting x402 payment details (network=${network})...`);
   const confirmRes = await fetch(
     `${CHECKOUT_INTENTS_BASE_URL}/api/v1/checkout-intents/${intent.id}/confirm`,
     {
       method: "POST",
       headers: baseHeaders,
-      body: JSON.stringify({ paymentMethod: { type: "x402", network: "base" } }),
+      body: JSON.stringify({ paymentMethod: { type: "x402", network } }),
     }
   );
 
@@ -75,46 +67,25 @@ async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buy
   const paymentRequiredHeader = confirmRes.headers.get("PAYMENT-REQUIRED");
   if (!paymentRequiredHeader) throw new Error("Missing PAYMENT-REQUIRED header");
 
-  const paymentRequired = JSON.parse(Buffer.from(paymentRequiredHeader, "base64").toString());
+  const paymentRequired = parsePaymentRequired(paymentRequiredHeader);
   console.log("Deposit address:", paymentRequired.recipient);
   console.log("Amount required:", paymentRequired.maxAmountRequired, "USDC");
 
-  // Step 4: Send USDC payment via Stripe
-  console.log("\n[4] Sending USDC payment...");
-  const txHash = "0x00000000000000000000000000000000000000000000000000000testsuccess";
-  const simulateRes = await fetch(
-    `https://api.stripe.com/v1/test_helpers/payment_intents/${paymentRequired.paymentIntentId}/simulate_crypto_deposit`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
-        "Stripe-Version": "2026-03-04.preview",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: `transaction_hash=${txHash}&network=base&token_currency=usdc&buyer_wallet=0x1234567890abcdef1234567890abcdef12345678`,
-    }
-  );
-  if (!simulateRes.ok) {
-    const err = await simulateRes.json();
-    throw new Error(`USDC payment failed: ${(err as any).error?.message}`);
-  }
-  console.log("USDC payment sent successfully");
+  // Step 4: Sign and send USDC transfer
+  console.log(`\n[4] Sending USDC on ${network}...`);
+  const txHash = await pay(network, paymentRequired);
 
   // Step 5: Retry confirm with payment signature
   console.log("\n[5] Confirming with payment signature...");
-  const paymentSignature = Buffer.from(
-    JSON.stringify({ signature: txHash, network: "eip155:8453", transactionHash: txHash })
-  ).toString("base64");
-
   const finalRes = await fetch(
     `${CHECKOUT_INTENTS_BASE_URL}/api/v1/checkout-intents/${intent.id}/confirm`,
     {
       method: "POST",
       headers: {
         ...baseHeaders,
-        "payment-signature": paymentSignature,
+        "PAYMENT-SIGNATURE": buildPaymentSignature(network, txHash),
       },
-      body: JSON.stringify({ paymentMethod: { type: "x402", network: "base" } }),
+      body: JSON.stringify({ paymentMethod: { type: "x402", network } }),
     }
   );
   const finalData = await finalRes.json();
@@ -139,12 +110,25 @@ async function purchaseWithX402(productUrl: string, quantity: number, buyer: Buy
   throw new Error("Timed out waiting for order completion");
 }
 
-const productUrl = process.argv[2];
-const quantity = parseInt(process.argv[3] ?? "1", 10);
-const buyerJson = process.argv[4];
+const args = process.argv.slice(2);
+let network: Network = "base";
+const netIdx = args.indexOf("--network");
+if (netIdx !== -1) {
+  const value = args[netIdx + 1];
+  if (value !== "base" && value !== "solana") {
+    console.error(`Invalid --network value: ${value} (expected base|solana)`);
+    process.exit(1);
+  }
+  network = value;
+  args.splice(netIdx, 2);
+}
+
+const productUrl = args[0];
+const quantity = parseInt(args[1] ?? "1", 10);
+const buyerJson = args[2];
 
 if (!productUrl || !buyerJson) {
-  console.error("Usage: npm start <product-url> <quantity> '<buyer-json>'");
+  console.error("Usage: npm run rye -- [--network base|solana] <product-url> <quantity> '<buyer-json>'");
   console.error("Example buyer JSON:");
   console.error(JSON.stringify({
     firstName: "Jane", lastName: "Doe", email: "jane@example.com",
@@ -162,4 +146,4 @@ try {
   process.exit(1);
 }
 
-purchaseWithX402(productUrl, quantity, buyer).catch(console.error);
+purchaseWithX402(productUrl, quantity, buyer, network).catch(console.error);
