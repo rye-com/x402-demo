@@ -14,7 +14,7 @@ demos/
 ## Demos
 
 - **`demos/rye-x402-demo`** — agent calls `api.rye.com` directly, authenticates with a Rye `CHECKOUT_INTENTS_API_KEY`, one x402 402 loop on `/confirm`. This is the original demo from the pre-reorg project.
-- **`demos/x402-proxy-demo`** — agent calls the [x402 proxy](../x402-proxy) at `x402.rye.com`, no Rye API key, two x402 402 loops (2¢ on `POST /v1/checkout-intents`, purchase + 3¢ on `/confirm`). GET polls use `X-Wallet-Address`. Not yet implemented.
+- **`demos/x402-proxy-demo`** — smoke test that validates a third-party buyer SDK ([`@agentcash/fetch`](https://www.npmjs.com/package/@agentcash/fetch)) can parse and pay the proxy's v2 x402 challenge. Targets a local proxy at `http://localhost:3000` by default (`pnpm dev` in `../x402-proxy`); override via `LOCAL_PROXY_URL`/`X402_PROXY_URL`. Stops after the 2¢ gate on `POST /v1/checkout-intents` — handshake validation only, not a full purchase.
 
 ## Stack
 
@@ -38,7 +38,8 @@ One `.env` at the repo root, shared by all demos. Copy `.env.example` to `.env` 
 
 ```
 CHECKOUT_INTENTS_API_KEY=    # Rye API key (rye-x402-demo only)
-X402_PROXY_URL=              # Proxy URL (x402-proxy-demo only)
+LOCAL_PROXY_URL=             # Local proxy URL (x402-proxy-demo, default http://localhost:3000)
+X402_PROXY_URL=              # Deployed proxy URL (x402-proxy-demo, optional override)
 AGENT_PRIVATE_KEY=0x...      # Base/EVM wallet
 AGENT_SOLANA_PRIVATE_KEY=    # Solana wallet (base58)
 ```

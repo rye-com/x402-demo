@@ -1,26 +1,37 @@
 # x402-proxy-demo
 
-Agent that purchases products through the [x402 proxy](https://x402.rye.com) — a wallet-native gateway that sits in front of Rye's Checkout Intent API.
+Smoke test that validates a third-party x402 buyer SDK can parse and pay our [x402 proxy](../../../x402-proxy)'s v2 challenge. The point is the SDK — not our own client agreeing with our own server.
 
-**Status:** not yet implemented.
+Buyer SDK: [`@agentcash/fetch`](https://www.npmjs.com/package/@agentcash/fetch). Its `executeFetch()` handles the 402 loop end-to-end: probe → parse `PAYMENT-REQUIRED` → sign USDC transfer → retry with `PAYMENT-SIGNATURE`.
 
-## What this demo will show
+Targets the **local** proxy by default (`http://localhost:3000`). Override with `LOCAL_PROXY_URL` or `X402_PROXY_URL`.
 
-Unlike `rye-x402-demo`, the agent has **no Rye API key**. It authenticates purely by paying USDC on-chain; the proxy injects its own shared Rye `apiKey` when forwarding.
+## What it does
 
-## Planned flow
+1. POST `/v1/checkout-intents` via `@agentcash/fetch`.
+2. Proxy returns `402` with a v2 `PAYMENT-REQUIRED` header (atomic-unit `maxAmountRequired`, `payTo`, `eip155:8453`).
+3. SDK pays ~2¢ USDC on Base and retries with `PAYMENT-SIGNATURE`.
+4. Proxy returns `201` with the created intent.
+5. Demo prints the intent id + state and exits 0.
 
-1. `POST /v1/checkout-intents` → **402 (2¢ API gate)** → sign + retry with `PAYMENT-SIGNATURE`
-2. Poll `GET /v1/checkout-intents/:id` (free; wallet identity via `X-Wallet-Address` header)
-3. `POST /v1/checkout-intents/:id/confirm` → **402 (purchase + 3¢ fee)** → sign + retry
-4. Poll to completion
+Stops there. Doesn't poll for offer; doesn't call `/confirm`. This is a handshake validation, not a full purchase.
 
-Two x402 loops instead of one. See `/Users/hanyu/rye/x402-proxy` for the proxy itself.
+If the SDK fails to parse the 402, the script dumps the raw 402 body + the SDK error and exits non-zero — that's the signal we're hunting for.
 
-## Env
+## Prerequisites
 
-Reuses the same wallet keys as `rye-x402-demo`. Adds:
+The local proxy must be running:
 
+```bash
+cd ../x402-proxy && pnpm dev
 ```
-X402_PROXY_URL=https://x402.rye.com   # or http://localhost:3000 when running the proxy locally
+
+If it's not reachable, this demo fails fast.
+
+## Run
+
+```bash
+npm run proxy
 ```
+
+Reads `AGENT_PRIVATE_KEY` from the repo-root `.env`. Burns ~2¢ USDC + a tiny amount of ETH gas on Base mainnet **per successful run** — the proxy hardcodes Base mainnet USDC, so there's no testnet path.
